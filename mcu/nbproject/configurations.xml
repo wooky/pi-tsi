@@ -1,0 +1,139 @@
+<configurationDescriptor version="62">
+  <logicalFolder name="root" displayName="root" projectFiles="true">
+    <logicalFolder name="HeaderFiles" displayName="Header Files" projectFiles="true" />
+    <logicalFolder name="LinkerScript" displayName="Linker Files" projectFiles="true" />
+    <logicalFolder name="SourceFiles" displayName="Source Files" projectFiles="true" />
+    <logicalFolder name="ExternalFiles" displayName="Important Files" projectFiles="false">
+      <itemPath>Makefile</itemPath>
+    </logicalFolder>
+    <itemPath>main.c</itemPath>
+    <itemPath>init.h</itemPath>
+  </logicalFolder>
+  <sourceRootList></sourceRootList>
+  <projectmakefile>Makefile</projectmakefile>
+  <confs>
+    <conf name="free" type="2">
+      <toolsSet>
+        <developmentServer>localhost</developmentServer>
+        <targetDevice>PIC12F675</targetDevice>
+        <targetHeader></targetHeader>
+        <targetPluginBoard></targetPluginBoard>
+        <platformTool>PICkit3PlatformTool</platformTool>
+        <languageToolchain>XC8</languageToolchain>
+        <languageToolchainVersion>2.05</languageToolchainVersion>
+        <platform>3</platform>
+      </toolsSet>
+      <HI-TECH-COMP>
+        <property key="operation-mode" value="free" />
+        <property key="use-cci" value="true" />
+        <property key="verbose" value="false" />
+        <property key="optimization-level" value="-O0" />
+        <property key="optimization-debug" value="false" />
+      </HI-TECH-COMP>
+      <XC8-config-global>
+        <property key="advanced-elf" value="true" />
+        <property key="output-file-format" value="-mcof,+elf" />
+        <property key="stack-size-high" value="auto" />
+        <property key="stack-size-low" value="auto" />
+        <property key="stack-size-main" value="auto" />
+        <property key="stack-type" value="compiled" />
+        <property key="gcc-opt-std" value="-std=c99" />
+      </XC8-config-global>
+      <C32>
+        <property key="generate-16-bit-code" value="false" />
+        <property key="generate-micro-compressed-code" value="false" />
+      </C32>
+      <C32-AS>
+        <property key="generate-16-bit-code" value="false" />
+        <property key="generate-micro-compressed-code" value="false" />
+      </C32-AS>
+      <C32-LD>
+        <property key="generate-16-bit-code" value="false" />
+        <property key="generate-micro-compressed-code" value="false" />
+      </C32-LD>
+      <C32CPP>
+        <property key="generate-16-bit-code" value="false" />
+        <property key="generate-micro-compressed-code" value="false" />
+      </C32CPP>
+      <PKOBSKDEPlatformTool>
+        <property key="programoptions.uselvpprogramming" value="true" />
+      </PKOBSKDEPlatformTool>
+      <HI-TECH-LINK>
+        <property key="link-in-c-library" value="true" />
+        <property key="link-in-c-library-gcc" value="" />
+        <property key="data-model-size-of-double-float" value="24 bit" />
+      </HI-TECH-LINK>
+      <packs>
+        <pack vendor="Microchip" name="PIC10-12Fxxx_DFP" version="1.0.22" />
+      </packs>
+      <makeCustomizationType>
+        <makeCustomizationPutChecksumInUserID>false</makeCustomizationPutChecksumInUserID>
+      </makeCustomizationType>
+      <PICkit3PlatformTool>
+        <property key="poweroptions.powerenable" value="false" />
+        <property key="voltagevalue" value="5.0" />
+        <property key="programoptions.uselvpprogramming" value="false" />
+      </PICkit3PlatformTool>
+    </conf>
+    <conf name="pro" type="2">
+      <toolsSet>
+        <developmentServer>localhost</developmentServer>
+        <targetDevice>PIC12F675</targetDevice>
+        <targetHeader></targetHeader>
+        <targetPluginBoard></targetPluginBoard>
+        <platformTool>PICkit3PlatformTool</platformTool>
+        <languageToolchain>XC8</languageToolchain>
+        <languageToolchainVersion>2.05</languageToolchainVersion>
+        <platform>3</platform>
+      </toolsSet>
+      <HI-TECH-COMP>
+        <property key="operation-mode" value="pro" />
+        <property key="use-cci" value="true" />
+        <property key="verbose" value="false" />
+        <property key="optimization-level" value="-O0" />
+        <property key="optimization-debug" value="false" />
+      </HI-TECH-COMP>
+      <XC8-config-global>
+        <property key="advanced-elf" value="true" />
+        <property key="output-file-format" value="-mcof,+elf" />
+        <property key="stack-size-high" value="auto" />
+        <property key="stack-size-low" value="auto" />
+        <property key="stack-size-main" value="auto" />
+        <property key="stack-type" value="compiled" />
+        <property key="gcc-opt-std" value="-std=c99" />
+      </XC8-config-global>
+      <C32>
+        <property key="generate-16-bit-code" value="false" />
+        <property key="generate-micro-compressed-code" value="false" />
+      </C32>
+      <C32-AS>
+        <property key="generate-16-bit-code" value="false" />
+        <property key="generate-micro-compressed-code" value="false" />
+      </C32-AS>
+      <C32-LD>
+        <property key="generate-16-bit-code" value="false" />
+        <property key="generate-micro-compressed-code" value="false" />
+      </C32-LD>
+      <C32CPP>
+        <property key="generate-16-bit-code" value="false" />
+        <property key="generate-micro-compressed-code" value="false" />
+      </C32CPP>
+      <PKOBSKDEPlatformTool>
+        <property key="programoptions.uselvpprogramming" value="true" />
+      </PKOBSKDEPlatformTool>
+      <HI-TECH-LINK>
+        <property key="link-in-c-library" value="true" />
+        <property key="link-in-c-library-gcc" value="" />
+        <property key="data-model-size-of-double-float" value="24 bit" />
+      </HI-TECH-LINK>
+      <makeCustomizationType>
+        <makeCustomizationPutChecksumInUserID>false</makeCustomizationPutChecksumInUserID>
+      </makeCustomizationType>
+      <PICkit3PlatformTool>
+        <property key="poweroptions.powerenable" value="false" />
+        <property key="voltagevalue" value="5.0" />
+        <property key="programoptions.uselvpprogramming" value="false" />
+      </PICkit3PlatformTool>
+    </conf>
+  </confs>
+</configurationDescriptor>
