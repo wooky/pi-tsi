@@ -1,4 +1,5 @@
 #include "init.h"
+#include <stdbool.h>
 #include <stdint.h>
 
 // Resistor screen pins - pin 1 on bottom
@@ -16,7 +17,24 @@
 #define IFACE_CLK  3
 #define IFACE_DATA 5
 
-uint8_t buffer[3];
+union {
+    uint32_t raw;
+    struct {
+        unsigned : 8;
+        uint8_t dat2: 8;
+        uint8_t dat1: 8;
+        uint8_t dat0: 8;
+    };
+    struct {
+        unsigned : 8;
+        unsigned : 8;
+        unsigned : 8;
+        unsigned : 7;
+        uint8_t msb: 1;
+    };
+} buffer;
+
+_Bool interrupt_occurred = false;
 
 typedef enum {
     CAPTURE,
@@ -25,8 +43,23 @@ typedef enum {
     DONE
 } State;
 
+union {
+    uint16_t raw;
+    struct {
+        uint8_t preamble_count: 4;
+        uint8_t preamble_bit: 1;
+        unsigned : 3;
+        uint8_t tx_count: 5;
+        uint8_t state: 2;
+        uint8_t checksum: 1;
+    };
+} absolute_state;
+#define R() absolute_state.raw = 0;
+
 void setup()
 {
+    R();
+
     // Make data pin output
     TRISIO = ~(1 << IFACE_DATA);
     GPIO = 0;
@@ -36,8 +69,8 @@ void setup()
     
     // Trigger interrupt from the clock pin
     IOC = 1 << IFACE_CLK;
-    GIE = 1;
     GPIE = 1;
+    GIE = 1;
 }
 
 void capture_position()
@@ -51,9 +84,9 @@ void capture_position()
     ADCON0bits.CHS = AN_BOTTOM;
     GO = 1;
     while (GO) {}
-    
-    buffer[0] = ADRESH;	// [7-0]
-    buffer[1] = ADRESL; // [7-6]
+
+    buffer.dat0 = ADRESH; // 8/8
+    buffer.dat1 = ADRESL; // 2/8
     
     // Capture Y position - top to VDD (out), bottom to GND (out), sense left (in)
     TRISIO = ~((1 << IFACE_DATA) | (1 << RES_TOP) | (1 << RES_BOTTOM));
@@ -61,66 +94,65 @@ void capture_position()
     ADCON0bits.CHS = AN_LEFT;
     GO = 1;
     while (GO) {}
-    
-    buffer[1] |= ADRESH >> 2;                  // [7-2] go into [5-0]
-    buffer[2] = (ADRESH << 6) | (ADRESL >> 2); // [1-0] go into [7-6] ; [7-6] go into [5-4]
+
+    buffer.dat1 |= ADRESH >> 2;                  // 6/8
+    buffer.dat2 = (ADRESH << 6) | (ADRESL >> 2); // (2+2)/8
     
     // We're ready, disable ADC and make only data signal as output
     ADON = 0;
     TRISIO = ~(1 << IFACE_DATA);
 }
 
-char transmit_position()
+__bit transmit_position()
 {
-    static char pos = 0;
-    char addr_offset = pos / 8;
-    
-    // Set the data to the MSB of the buffer byte
-    GPIO = (buffer[addr_offset] >> 7) << IFACE_DATA;
-    
-    // Check if we read the entire buffer, all 20 bits
-    if (pos == 19)
+    // If we've transmitted all 20 bytes, finish up with the checksum
+    if (absolute_state.tx_count == 20)
     {
-        pos = 0;
+        GPIO = absolute_state.checksum << IFACE_DATA;
         return 1;
     }
     
-    // Shift left the buffer byte so we're ready for the next operation
-    buffer[addr_offset] <<= 1;
+    // Set the data to the MSB of the buffer byte and update the checksum
+    char data = buffer.msb;
+    GPIO = data << IFACE_DATA;
+    absolute_state.checksum ^= data;
     
-    pos++;
+    // Shift left the buffer byte so we're ready for the next operation
+    buffer.raw <<= 1;
+    
+    absolute_state.tx_count++;
     return 0;
 }
 
 void __interrupt() on_interrupt()
 {
-    // Acknowledge peripheral interrupt
-    GPIF = 0;
-
-    static State state = CAPTURE;
-    switch (state)
+    switch (absolute_state.state)
     {
     case CAPTURE:
         capture_position();
-        state = READY_TO_TRANSMIT;
+        absolute_state.state = READY_TO_TRANSMIT;
         break;
     case READY_TO_TRANSMIT:
         // Set data line to high to indicate we're ready
         GPIO = (1 << IFACE_DATA);
-        state = TRANSMITTING;
+        absolute_state.state = TRANSMITTING;
         break;
     case TRANSMITTING:
         if (transmit_position())
         {
-            state = DONE;
+            absolute_state.state = DONE;
         }
         break;
     case DONE:
         // Set data line to low to acknowledge we're done
         GPIO = 0;
-        state = CAPTURE;
+        R();
         break;
     }
+    
+    // Acknowledge peripheral interrupt
+    interrupt_occurred = true;
+    GPIF = 0;
 }
 
 void main()
@@ -128,5 +160,16 @@ void main()
     setup();
     while (1) {
         SLEEP();
+        if (interrupt_occurred)
+        {
+            interrupt_occurred = false;
+        }
+        else
+        {
+            // If we're at this point, we haven't received a signal fast enough, i.e. timed out
+            // "Reset" the peripheral
+            GPIO = 0;
+            R();
+        }
     }
 }
