@@ -37,7 +37,11 @@ union {
 _Bool interrupt_occurred = false;
 
 typedef enum {
-    CAPTURE,
+    START,
+    PREPARE_X,
+    CAPTURE_X,
+    PREPARE_Y,
+    CAPTURE_Y,
     READY_TO_TRANSMIT,
     TRANSMITTING,
     DONE
@@ -46,15 +50,13 @@ typedef enum {
 union {
     uint16_t raw;
     struct {
-        uint8_t preamble_count: 4;
-        uint8_t preamble_bit: 1;
-        unsigned : 3;
-        uint8_t tx_count: 5;
-        uint8_t state: 2;
+        uint8_t tx_count: 8;
+        uint8_t state: 3;
         uint8_t checksum: 1;
+        unsigned : 4;
     };
 } absolute_state;
-#define R() absolute_state.raw = 0;
+#define R() GPIO = 0; absolute_state.raw = 0;
 
 void setup()
 {
@@ -62,45 +64,84 @@ void setup()
 
     // Make data pin output
     TRISIO = ~(1 << IFACE_DATA);
-    GPIO = 0;
 
-    // Make all analog pins... well, analog!
-    ANSEL = 0b00001111;
-    
+    // Set A/D timing
+    ANSELbits.ADCS = 0b101;   // 4us @ 4MHz INTOSC
+
     // Trigger interrupt from the clock pin
     IOC = 1 << IFACE_CLK;
     GPIE = 1;
     GIE = 1;
 }
 
-void capture_position()
+void prepare_x()
 {
-	// Enable ADC
+    // Left -> VDD
+    // Right -> GND
+    // Bottom <- result
+
+	// Make bottom pin analog and enable ADC
+	ANSEL = 1 << AN_BOTTOM;
+	ADCON0bits.CHS = AN_BOTTOM;
 	ADON = 1;
-	
-    // Capture X position - left to VDD (out), right to GND (out), sense bottom (in)
+
+    // Set voltages of left and right pins
     TRISIO = ~((1 << IFACE_DATA) | (1 << RES_RIGHT) | (1 << RES_LEFT));
     GPIO = 1 << RES_LEFT;
-    ADCON0bits.CHS = AN_BOTTOM;
+    
+    // Disable pull up of non-outputs
+    WPU = ~((1 << RES_TOP) | (1 << RES_BOTTOM));
+}
+
+void capture_x()
+{
+    // Fetch and copy result
     GO = 1;
     while (GO) {}
-
     buffer.dat0 = ADRESH; // 8/8
     buffer.dat1 = ADRESL; // 2/8
-    
-    // Capture Y position - top to VDD (out), bottom to GND (out), sense left (in)
-    TRISIO = ~((1 << IFACE_DATA) | (1 << RES_TOP) | (1 << RES_BOTTOM));
-    GPIO = 1 << RES_TOP;
-    ADCON0bits.CHS = AN_LEFT;
-    GO = 1;
-    while (GO) {}
 
-    buffer.dat1 |= ADRESH >> 2;                  // 6/8
-    buffer.dat2 = (ADRESH << 6) | (ADRESL >> 2); // (2+2)/8
-    
     // We're ready, disable ADC and make only data signal as output
     ADON = 0;
+    ANSEL = 0;
+    GPIO = 0;
     TRISIO = ~(1 << IFACE_DATA);
+    WPU = ~0;
+}
+
+void prepare_y()
+{
+    // Top -> VDD
+    // Bottom -> GND
+    // Left <- in
+
+	// Make left pin analog and enable ADC
+	ANSEL = 1 << AN_LEFT;
+	ADCON0bits.CHS = AN_LEFT;
+	ADON = 1;
+
+	// Set voltages of top and bottom pins
+    TRISIO = ~((1 << IFACE_DATA) | (1 << RES_TOP) | (1 << RES_BOTTOM));
+    GPIO = 1 << RES_TOP;
+    
+    // Disable pull-up of non-outputs
+    WPU = ~((1 << RES_RIGHT) | (1 << RES_LEFT));
+}
+
+void capture_y()
+{
+    // Fetch and copy result
+    GO = 1;
+    while (GO) {}
+    buffer.dat1 |= ADRESH >> 2;                  // 6/8
+    buffer.dat2 = (ADRESH << 6) | (ADRESL >> 2); // (2+2)/8
+
+    // We're ready, disable ADC and make only data signal as output
+    ADON = 0;
+    ANSEL = 0;
+    GPIO = 0;
+    TRISIO = ~(1 << IFACE_DATA);
+    WPU = ~0;
 }
 
 __bit transmit_position()
@@ -111,15 +152,15 @@ __bit transmit_position()
         GPIO = absolute_state.checksum << IFACE_DATA;
         return 1;
     }
-    
+
     // Set the data to the MSB of the buffer byte and update the checksum
     char data = buffer.msb;
     GPIO = data << IFACE_DATA;
     absolute_state.checksum ^= data;
-    
+
     // Shift left the buffer byte so we're ready for the next operation
     buffer.raw <<= 1;
-    
+
     absolute_state.tx_count++;
     return 0;
 }
@@ -128,28 +169,42 @@ void __interrupt() on_interrupt()
 {
     switch (absolute_state.state)
     {
-    case CAPTURE:
-        capture_position();
-        absolute_state.state = READY_TO_TRANSMIT;
+    case START: // dummy state
+        absolute_state.state++;
+        // fall through!
+    case PREPARE_X:
+        prepare_x();
+        absolute_state.state++;
+        break;
+    case CAPTURE_X:
+        capture_x();
+        absolute_state.state++;
+        break;
+    case PREPARE_Y:
+        prepare_y();
+        absolute_state.state++;
+        break;
+    case CAPTURE_Y:
+        capture_y();
+        absolute_state.state++;
         break;
     case READY_TO_TRANSMIT:
         // Set data line to high to indicate we're ready
         GPIO = (1 << IFACE_DATA);
-        absolute_state.state = TRANSMITTING;
+        absolute_state.state++;
         break;
     case TRANSMITTING:
         if (transmit_position())
         {
-            absolute_state.state = DONE;
+            absolute_state.state++;
         }
         break;
     case DONE:
-        // Set data line to low to acknowledge we're done
-        GPIO = 0;
+        // Set to ready state
         R();
         break;
     }
-    
+
     // Acknowledge peripheral interrupt
     interrupt_occurred = true;
     GPIF = 0;
@@ -168,7 +223,6 @@ void main()
         {
             // If we're at this point, we haven't received a signal fast enough, i.e. timed out
             // "Reset" the peripheral
-            GPIO = 0;
             R();
         }
     }
