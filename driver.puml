@@ -7,7 +7,7 @@ loop While IFACE_CLK = 1
     Pi <- MCU: IFACE_DATA = 0
     MCU -> ts: Poll coordinates
     MCU <- ts: Get coordinates
-    alt Coordinates != (0,0)
+    alt Coordinates != (0,0) or last coordinates != (0,0)
         Pi <- MCU: IFACE_DATA = 1
         loop 10 bits
             Pi -> MCU: Toggle IFACE_CLK
