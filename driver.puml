@@ -1,0 +1,25 @@
+@startuml driver
+participant Pi
+participant MCU
+participant Touchscreen as ts
+
+loop While IFACE_CLK = 1
+    Pi <- MCU: IFACE_DATA = 0
+    MCU -> ts: Poll coordinates
+    MCU <- ts: Get coordinates
+    alt Coordinates != (0,0)
+        Pi <- MCU: IFACE_DATA = 1
+        loop 10 bits
+            Pi -> MCU: Toggle IFACE_CLK
+            Pi <- MCU: IFACE_DATA = x coordinate, MSB first
+        end
+        loop 10 bits
+            Pi -> MCU: Toggle IFACE_CLK
+            Pi <- MCU: IFACE_DATA = y coordinate, MSB first
+        end
+        Pi -> MCU: Toggle IFACE_CLK
+        Pi <- MCU: IFACE_DATA = XOR'd checksum
+    end
+    MCU -> MCU: Sleep until interrupted
+end
+@enduml
