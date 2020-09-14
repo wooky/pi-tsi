@@ -16,6 +16,7 @@
 
 #define IFACE_CLK  3
 #define IFACE_DATA 5
+#define GPIO_CLK (GPIO & (1 << IFACE_CLK))
 
 union {
     uint32_t raw;
@@ -34,17 +35,10 @@ union {
     };
 } buffer;
 
-_Bool interrupt_occurred = false;
-
 typedef enum {
-    START,
-    PREPARE_X,
-    CAPTURE_X,
-    PREPARE_Y,
-    CAPTURE_Y,
-    READY_TO_TRANSMIT,
-    TRANSMITTING,
-    DONE
+    INACTIVE,
+    CAPTURE,
+    TRANSMITTING
 } State;
 
 union {
@@ -53,7 +47,9 @@ union {
         uint8_t tx_count: 8;
         uint8_t state: 3;
         uint8_t checksum: 1;
-        unsigned : 4;
+        uint8_t last_clk: 1;
+        uint8_t last_capture_was_nonzero: 1;
+        unsigned : 2;
     };
 } absolute_state;
 #define R() GPIO = 0; absolute_state.raw = 0;
@@ -74,8 +70,10 @@ void setup()
     GIE = 1;
 }
 
-void prepare_x()
+__bit capture()
 {
+    ////////// PREPARE X //////////
+    
     // Left -> VDD
     // Right -> GND
     // Bottom <- result
@@ -91,10 +89,9 @@ void prepare_x()
     
     // Disable pull up of non-outputs
     WPU = ~((1 << RES_TOP) | (1 << RES_BOTTOM));
-}
 
-void capture_x()
-{
+    ////////// CAPTURE X //////////
+    
     // Fetch and copy result
     GO = 1;
     while (GO) {}
@@ -107,10 +104,9 @@ void capture_x()
     GPIO = 0;
     TRISIO = ~(1 << IFACE_DATA);
     WPU = ~0;
-}
 
-void prepare_y()
-{
+    ////////// PREPARE Y //////////
+    
     // Top -> VDD
     // Bottom -> GND
     // Left <- in
@@ -126,10 +122,9 @@ void prepare_y()
     
     // Disable pull-up of non-outputs
     WPU = ~((1 << RES_RIGHT) | (1 << RES_LEFT));
-}
 
-void capture_y()
-{
+    ////////// CAPTURE Y //////////
+    
     // Fetch and copy result
     GO = 1;
     while (GO) {}
@@ -142,6 +137,15 @@ void capture_y()
     GPIO = 0;
     TRISIO = ~(1 << IFACE_DATA);
     WPU = ~0;
+    
+    ////////// SHOULD WE SEND? //////////
+    
+    if (absolute_state.last_capture_was_nonzero || buffer.raw != 0)
+    {
+        absolute_state.last_capture_was_nonzero = buffer.raw != 0;
+        return true;
+    }
+    return false;
 }
 
 __bit transmit_position()
@@ -150,7 +154,7 @@ __bit transmit_position()
     if (absolute_state.tx_count == 20)
     {
         GPIO = absolute_state.checksum << IFACE_DATA;
-        return 1;
+        return true;
     }
 
     // Set the data to the MSB of the buffer byte and update the checksum
@@ -162,52 +166,7 @@ __bit transmit_position()
     buffer.raw <<= 1;
 
     absolute_state.tx_count++;
-    return 0;
-}
-
-void __interrupt() on_interrupt()
-{
-    switch (absolute_state.state)
-    {
-    case START: // dummy state
-        absolute_state.state++;
-        // fall through!
-    case PREPARE_X:
-        prepare_x();
-        absolute_state.state++;
-        break;
-    case CAPTURE_X:
-        capture_x();
-        absolute_state.state++;
-        break;
-    case PREPARE_Y:
-        prepare_y();
-        absolute_state.state++;
-        break;
-    case CAPTURE_Y:
-        capture_y();
-        absolute_state.state++;
-        break;
-    case READY_TO_TRANSMIT:
-        // Set data line to high to indicate we're ready
-        GPIO = (1 << IFACE_DATA);
-        absolute_state.state++;
-        break;
-    case TRANSMITTING:
-        if (transmit_position())
-        {
-            absolute_state.state++;
-        }
-        break;
-    case DONE:
-        // Set to ready state
-        R();
-        break;
-    }
-
-    // Acknowledge peripheral interrupt
-    interrupt_occurred = true;
-    GPIF = 0;
+    return false;
 }
 
 void main()
@@ -215,15 +174,42 @@ void main()
     setup();
     while (1) {
         SLEEP();
-        if (interrupt_occurred)
+        switch (absolute_state.state)
         {
-            interrupt_occurred = false;
-        }
-        else
-        {
-            // If we're at this point, we haven't received a signal fast enough, i.e. timed out
-            // "Reset" the peripheral
+        case INACTIVE:
+            if (GPIO_CLK)
+            {
+                absolute_state.state = CAPTURE;
+            }
             R();
+            break;
+        case CAPTURE:
+            if (!GPIO_CLK)
+            {
+                absolute_state.state = INACTIVE;
+            }
+            else if (capture())
+            {
+                // Set data line high to indicate we're ready
+                GPIO = (1 << IFACE_DATA);
+                absolute_state.state = TRANSMITTING;
+            }
+            break;
+        case TRANSMITTING:
+            if (GPIO_CLK == absolute_state.last_clk)
+            {
+                // Possible timeout
+                absolute_state.state = INACTIVE;
+            }
+            else
+            {
+                absolute_state.last_clk ^= 1;
+                if (transmit_position())
+                {
+                    absolute_state.state = INACTIVE;
+                }
+            }
+            break;
         }
     }
 }
