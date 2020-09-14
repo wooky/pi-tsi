@@ -69,7 +69,8 @@ class DataPacket:
 class Mouse:
     from pynput.mouse import Button, Controller
 
-    def __init__(self) -> None:
+    def __init__(self, logger: Logger) -> None:
+        self.__logger = logger
         self.__controller = Controller()
         self.__pressed = False
 
@@ -78,11 +79,14 @@ class Mouse:
             if self.__pressed:
                 self.__pressed = False
                 self.__controller.release(Button.left)
+                self.__logger.debug("Mouse released")
         else:
             self.__controller.position = (x, y)
+            self.__logger.debug("Mouse moved to ({},{})", x, y)
             if not self.__pressed:
                 self.__pressed = True
                 self.__controller.press(Button.left)
+                self.__logger.debug("Mouse pressed")
 
 class Driver:
     import time
@@ -91,7 +95,7 @@ class Driver:
         self.__logger = logger
         self.__clk = Clk(args)
         self.__data = Data(args)
-        self.__mouse = Mouse()
+        self.__mouse = Mouse(logger)
         self.__timeout = us_to_s(args.timeout)
 
         logger.info("Driver initialized")
