@@ -129,8 +129,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     logger = logging.getLogger('tsi-driver')
-    logger.addHandler(logging.handlers.SysLogHandler())
-    logger.setLevel(logging.DEBUG if args.debug else logging.INFO)
+    if args.debug:
+        logger.addHandler(logging.StreamHandler())
+        logger.setLevel(logging.DEBUG)
+    else:
+        logger.addHandler(logging.handlers.SysLogHandler())
+        logger.setLevel(logging.INFO)
 
     try:
         driver = Driver(logger, args)
